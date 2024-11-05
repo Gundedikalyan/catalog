@@ -1,76 +1,76 @@
-import org.json.JSONObject;
-import org.json.JSONTokener;
-
-import java.io.FileReader;
+import java.util.*;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
-public class PolynomialConstantFinder {
+public class ShamirSecretSharing {
 
-    public static void main(String[] args) {
-        try {
-            // Load JSON from file
-            JSONTokener tokener = new JSONTokener(new FileReader("input.json"));
-            JSONObject input = new JSONObject(tokener);
-            
-            // Extract keys "n" and "k"
-            JSONObject keys = input.getJSONObject("keys");
-            int n = keys.getInt("n");
-            int k = keys.getInt("k");
-            
-            // Collect and decode (x, y) points
-            Map<Integer, BigInteger> points = new HashMap<>();
-            for (String key : input.keySet()) {
-                if (key.equals("keys")) continue;
-
-                // x-value
-                int x = Integer.parseInt(key);
-                
-                // Decode y-value
-                JSONObject root = input.getJSONObject(key);
-                int base = root.getInt("base");
-                String valueStr = root.getString("value");
-                BigInteger y = new BigInteger(valueStr, base);
-
-                // Store decoded (x, y) pair
-                points.put(x, y);
-            }
-
-            // Calculate the constant term using Lagrange interpolation at f(0)
-            BigInteger secret = findConstantTerm(points, k);
-            System.out.println("Secret constant term c: " + secret);
-            
-        } catch (Exception e) {
-            e.printStackTrace();
+    // Method to generate random coefficients for the polynomial
+    private static BigInteger[] generateCoefficients(int degree) {
+        BigInteger[] coefficients = new BigInteger[degree + 1];
+        Random rand = new Random();
+        for (int i = 0; i < coefficients.length; i++) {
+            coefficients[i] = BigInteger.valueOf(rand.nextInt(100)); // Random coefficients
         }
+        return coefficients;
     }
 
-    private static BigInteger findConstantTerm(Map<Integer, BigInteger> points, int k) {
+    // Method to evaluate the polynomial at a given x
+    private static BigInteger evaluatePolynomial(BigInteger[] coefficients, int x) {
         BigInteger result = BigInteger.ZERO;
+        for (int i = 0; i < coefficients.length; i++) {
+            result = result.add(coefficients[i].multiply(BigInteger.valueOf(x).pow(i)));
+        }
+        return result;
+    }
 
-        // Loop over each point as part of Lagrange interpolation
-        for (Map.Entry<Integer, BigInteger> entry : points.entrySet()) {
-            if (k <= 0) break; // Use only the first k points
-            k--;
+    // Method to create shares
+    public static Map<Integer, BigInteger> createShares(int n, int k, BigInteger secret) {
+        BigInteger[] coefficients = generateCoefficients(k - 1);
+        coefficients[0] = secret; // Set the constant term to the secret
 
-            int xi = entry.getKey();
-            BigInteger yi = entry.getValue();
+        Map<Integer, BigInteger> shares = new HashMap<>();
+        for (int i = 1; i <= n; i++) {
+            shares.put(i, evaluatePolynomial(coefficients, i).mod(BigInteger.valueOf(256))); // Modulo for simplicity
+        }
+        return shares;
+    }
 
-            // Compute the Lagrange basis polynomial L_i(0)
-            BigInteger term = yi;
-            for (Map.Entry<Integer, BigInteger> other : points.entrySet()) {
-                int xj = other.getKey();
-                if (xi != xj) {
-                    term = term.multiply(BigInteger.valueOf(-xj))
-                                .divide(BigInteger.valueOf(xi - xj));
+    // Method to reconstruct the secret using Lagrange interpolation
+    public static BigInteger reconstructSecret(Map<Integer, BigInteger> shares, int k) {
+        BigInteger secret = BigInteger.ZERO;
+        List<Integer> xValues = new ArrayList<>(shares.keySet());
+
+        for (int i = 0; i < k; i++) {
+            BigInteger xi = BigInteger.valueOf(xValues.get(i));
+            BigInteger yi = shares.get(xi.intValue());
+
+            BigInteger li = BigInteger.ONE;
+            for (int j = 0; j < k; j++) {
+                if (i != j) {
+                    BigInteger xj = BigInteger.valueOf(xValues.get(j));
+                    li = li.multiply(xj.negate()).multiply(xi.subtract(xj).mod(BigInteger.valueOf(256))).mod(BigInteger.valueOf(256));
                 }
             }
-
-            // Accumulate to result
-            result = result.add(term);
+            secret = secret.add(yi.multiply(li)).mod(BigInteger.valueOf(256));
         }
+        return secret;
+    }
 
-        return result;
+    public static void main(String[] args) {
+        int n = 4; // Total shares
+        int k = 3; // Minimum shares required to reconstruct the secret
+        BigInteger secret = BigInteger.valueOf(65); // The secret to be shared
+
+        // Create shares
+        Map<Integer, BigInteger> shares = createShares(n, k, secret);
+        System.out.println("Shares: " + shares);
+
+        // Reconstruct the secret using the first k shares
+        BigInteger reconstructedSecret = reconstructSecret(shares, k);
+        System.out.println("Reconstructed Secret: " + reconstructedSecret);
     }
 }
