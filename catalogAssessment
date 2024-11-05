@@ -1,0 +1,76 @@
+import org.json.JSONObject;
+import org.json.JSONTokener;
+
+import java.io.FileReader;
+import java.math.BigInteger;
+import java.util.HashMap;
+import java.util.Map;
+
+public class PolynomialConstantFinder {
+
+    public static void main(String[] args) {
+        try {
+            // Load JSON from file
+            JSONTokener tokener = new JSONTokener(new FileReader("input.json"));
+            JSONObject input = new JSONObject(tokener);
+            
+            // Extract keys "n" and "k"
+            JSONObject keys = input.getJSONObject("keys");
+            int n = keys.getInt("n");
+            int k = keys.getInt("k");
+            
+            // Collect and decode (x, y) points
+            Map<Integer, BigInteger> points = new HashMap<>();
+            for (String key : input.keySet()) {
+                if (key.equals("keys")) continue;
+
+                // x-value
+                int x = Integer.parseInt(key);
+                
+                // Decode y-value
+                JSONObject root = input.getJSONObject(key);
+                int base = root.getInt("base");
+                String valueStr = root.getString("value");
+                BigInteger y = new BigInteger(valueStr, base);
+
+                // Store decoded (x, y) pair
+                points.put(x, y);
+            }
+
+            // Calculate the constant term using Lagrange interpolation at f(0)
+            BigInteger secret = findConstantTerm(points, k);
+            System.out.println("Secret constant term c: " + secret);
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static BigInteger findConstantTerm(Map<Integer, BigInteger> points, int k) {
+        BigInteger result = BigInteger.ZERO;
+
+        // Loop over each point as part of Lagrange interpolation
+        for (Map.Entry<Integer, BigInteger> entry : points.entrySet()) {
+            if (k <= 0) break; // Use only the first k points
+            k--;
+
+            int xi = entry.getKey();
+            BigInteger yi = entry.getValue();
+
+            // Compute the Lagrange basis polynomial L_i(0)
+            BigInteger term = yi;
+            for (Map.Entry<Integer, BigInteger> other : points.entrySet()) {
+                int xj = other.getKey();
+                if (xi != xj) {
+                    term = term.multiply(BigInteger.valueOf(-xj))
+                                .divide(BigInteger.valueOf(xi - xj));
+                }
+            }
+
+            // Accumulate to result
+            result = result.add(term);
+        }
+
+        return result;
+    }
+}
